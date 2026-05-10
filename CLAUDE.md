@@ -1,83 +1,73 @@
-# CLAUDE.md — hermes-swift-mac
+CLAUDE.md — hermes-swift-mac
 
-> Read this before touching any code. Native macOS app wrapping hermes-webui via WKWebView.
-
----
-
-## What this project is
-
-A native macOS menubar app that loads hermes-webui in a WKWebView. No sandboxing
-(ad-hoc signed). Sparkle 2 for auto-updates. Optional SSH tunnel support via
-`TunnelManager.swift`. Targets macOS 12+, ships as a universal arm64+x86_64 DMG.
-
-**Language:** Swift 5.9  
-**Build:** `bash build.sh` (local) or tag a `v*` to trigger CI DMG build  
-**Tests:** `swift test` (runs `Tests/HermesAgentTests/ValidationTests.swift`)  
-**CI:** `.github/workflows/build-release.yml` (release), `test.yml` (PR tests)  
-**Latest release:** check `git tag --sort=-v:refname | head -1`
+> 在修改任何程式碼前請先閱讀此文件。這是一個使用 WKWebView 封裝 hermes-webui 的 macOS 原生應用程式。
 
 ---
 
-## Repo structure
+專案簡介
 
-```
+這是一款 macOS 系統選單列原生應用程式，透過 WKWebView 載入 hermes-webui。無沙盒（臨時簽署）。使用 Sparkle 2 進行自動更新。可選擇透過 TunnelManager.swift 支援 SSH 隧道。目標 macOS 12+，以通用 arm64+x86_64 DMG 發布。
+
+語言： Swift 5.9  
+建置： bash build.sh（本地）或建立 v* 標籤觸發 CI 產生 DMG  
+測試： swift test（執行 Tests/HermesAgentTests/ValidationTests.swift）  
+CI： .github/workflows/build-release.yml（發布）、test.yml（PR 測試）  
+最新版本： git tag --sort=-v:refname | head -1
+
+---
+
+專案結構
+
 Sources/HermesAgent/
-  AppDelegate.swift               # App lifecycle, menu bar setup, Sparkle updater
-  BrowserWindowController.swift   # Main WKWebView window + WKNavigationDelegate
-  PreferencesWindowController.swift  # Target URL + settings
-  SplashWindowController.swift    # Loading screen
-  TunnelManager.swift             # Optional SSH tunnel (Process-based)
-  main.swift                      # Entry point
+  AppDelegate.swift               # App 生命週期、選單列初始化、Sparkle 更新
+  BrowserWindowController.swift   # 主要 WKWebView 視窗 + WKNavigationDelegate
+  PreferencesWindowController.swift  # 目標 URL 與設定
+  SplashWindowController.swift    # 載入畫面
+  TunnelManager.swift             # 可選 SSH 隧道（基於 Process）
+  main.swift                      # 入口
 
 Tests/HermesAgentTests/
-  ValidationTests.swift           # URL validation, preference parsing tests
+  ValidationTests.swift           # URL 驗證與偏好設定解析測試
 
-build.sh          # Local build — generates Info.plist heredoc, signs ad-hoc
-Package.swift     # SPM — depends on Sparkle 2 only
-Entitlements.plist  # No sandbox — ad-hoc signed
-appcast.xml       # Sparkle update feed (hosted on GitHub Pages)
-CHANGELOG.md      # One entry per release — update before every tag
-```
+build.sh          # 本地建置 — 產生 Info.plist、臨時簽署
+Package.swift     # SPM — 僅依賴 Sparkle 2
+Entitlements.plist  # 無沙盒 — 臨時簽署
+appcast.xml       # Sparkle 更新來源（GitHub Pages）
+CHANGELOG.md      # 每版一條紀錄 — 標籤前更新
 
 ---
 
-## The rules
+規則
 
-### Never push directly to main
-All changes through a named branch + PR. Tests must pass. CHANGELOG entry required.
+不要直接推送到 main
+所有修改需透過命名分支 + PR。測試必須通過。必須更新 CHANGELOG。
 
-### SSH push required
-```bash
+強制使用 SSH 推送
 eval $(ssh-agent -s) && ssh-add ~/.ssh/id_ed25519
 git push origin <branch>
-# or for tags:
+# 或推送標籤：
 git push origin v1.x.y
-```
-HTTPS token push fails for this repo. Always use ssh-agent.
+HTTPS token 推送會失敗，必須使用 ssh-agent。
 
-### Plist key parity — build.sh AND CI workflow must match
-Every `Info.plist` key must exist in **both** places:
-- `build.sh` heredoc (lines ~60-100)
-- `.github/workflows/build-release.yml` PlistBuddy block
+Plist 鍵值一致性 — build.sh 與 CI workflow 必須相符
+每個 Info.plist 鍵值必須同時存在於：
+build.sh heredoc（約第 60-100 行）
+.github/workflows/build-release.yml 的 PlistBuddy 區塊
 
-If you add a key in one place and forget the other, local builds work but CI DMG
-ships without the key — or vice versa. Check both every time.
+若僅更新其中一處，可能導致本地建置可用但 CI DMG 缺少鍵值，或反之。務必每次同步檢查。
 
-### CHANGELOG before tagging
-Update `CHANGELOG.md` before pushing a release tag. CI creates the GitHub Release
-from the tag — if CHANGELOG is stale, the release notes will be wrong.
+標籤前必須更新 CHANGELOG
+在推送發布標籤前更新 CHANGELOG.md。CI 會從標籤自動建立 GitHub Release，若紀錄過期，發布說明會錯誤。
 
 ---
 
-## WKWebView rules — read before touching BrowserWindowController.swift
+WKWebView 規則 — 修改 BrowserWindowController.swift 前必讀
 
-### ATS (App Transport Security)
-`http://localhost` is ATS-exempt automatically. Any other `http://` URL — Tailscale
-IPs (`100.x.x.x`), LAN IPs, hostnames — is **blocked by default**.
+ATS（App Transport Security）
+http://localhost 自動免 ATS 限制。其他 http:// URL（Tailscale IP 100.x.x.x、區域網路 IP、主機名）預設會被阻擋。
 
-Fix (already filed as issue #25):
-```xml
-<!-- In Info.plist heredoc in build.sh AND CI workflow -->
+修正方式（已在 issue #25）：
+<!-- 需同時在 build.sh 與 CI workflow 的 Info.plist heredoc 中加入 -->
 <key>NSAppTransportSecurity</key>
 <dict>
     <key>NSAllowsArbitraryLoads</key>
@@ -85,11 +75,9 @@ Fix (already filed as issue #25):
     <key>NSAllowsArbitraryLoadsInWebContent</key>
     <true/>
 </dict>
-```
 
-### Navigation delegate — implement both failure callbacks
-```swift
-// MUST implement both — missing either causes silent failures
+Navigation delegate — 兩個失敗回呼都必須實作
+// 必須同時實作，缺一會導致無提示失敗
 func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
     handleNavigationFailure(error)
 }
@@ -99,78 +87,70 @@ func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError 
 
 private func handleNavigationFailure(_ error: Error) {
     let code = (error as NSError).code
-    if code == NSURLErrorCancelled { return }  // -999: filter cancelled navigations
-    // Show error dialog with helpful message based on error code:
-    // -1022: ATS blocked plain HTTP → suggest SSH tunnel or NSAllowsArbitraryLoadsInWebContent
-    // -1004: Cannot connect → server not running or wrong URL
-    // -1003: DNS failure
+    if code == NSURLErrorCancelled { return }  // -999: 過濾取消導覽
+    // 根據錯誤碼顯示提示訊息：
+    // -1022: ATS 阻擋 HTTP → 建議使用 SSH 隧道或 NSAllowsArbitraryLoadsInWebContent
+    // -1004: 無法連線 → 伺服器未運行或 URL 錯誤
+    // -1003: DNS 解析失敗
 }
-```
 
-### Never navigate to file:// URLs
-Only `http://` and `https://`. WKWebView with no sandbox has broad file access —
-restrict navigation policy to `http`/`https` schemes only.
+禁止導覽到 file:// URL
+僅允許 http:// 與 https://。WKWebView 在無沙盒下可廣泛存取檔案，因此需限制僅允許網路協議。
 
 ---
 
-## Sparkle 2 — read before touching auto-update code
+Sparkle 2 — 修改自動更新前必讀
 
-- `SUPublicEDKey` in Info.plist must match the private key used to sign `appcast.xml`
-- `SUFeedURL` in Info.plist: `https://hermes-webui.github.io/hermes-swift-mac/appcast.xml`
-- Sign inside-out for CI codesigning: XPC services → Sparkle.framework → app bundle
-- `--preserve-metadata=entitlements` required when re-signing XPC services
-- Never codesign the DMG before notarization — notarize the app bundle, then package into DMG
-- XPC services removed from local builds (`build.sh` deletes them) — keep this
+Info.plist 的 SUPublicEDKey 必須與簽署 appcast.xml 的私鑰匹配
+Info.plist 的 SUFeedURL：https://hermes-webui.github.io/hermes-swift-mac/appcast.xml
+CI 簽署順序必須由內而外：XPC 服務 → Sparkle.framework → App Bundle
+重新簽署 XPC 服務時需使用 --preserve-metadata=entitlements
+DMG 不可先簽署再公證，必須先公證 App Bundle，再打包 DMG
+本地建置會移除 XPC 服務（build.sh 會刪除）
 
 ---
 
-## SSH tunnel — read before touching TunnelManager.swift
+SSH 隧道 — 修改 TunnelManager.swift 前必讀
 
-```swift
-// CORRECT: args as array (safe from shell injection)
+// 正確：陣列參數（避免 Shell 注入）
 process.arguments = ["-N", "-L", "8787:127.0.0.1:8787", "user@host"]
 
-// WRONG: shell string (injection risk)
+// 錯誤：字串指令（存在注入風險）
 process.arguments = ["-c", "ssh -N -L 8787:127.0.0.1:8787 \(host)"]
-```
 
-Always use `StrictHostKeyChecking=yes` and `ExitOnForwardFailure=yes` in tunnel args.
-Use `DispatchSource` for process signals, not polling.
-
----
-
-## Known issues / open work
-
-- **#25** — Non-localhost URLs (Tailscale IPs) silently fail due to ATS + server binding.
-  Fix: add `NSAllowsArbitraryLoadsInWebContent` to Info.plist (in both build.sh and CI),
-  and implement `didFailProvisionalNavigation` in `BrowserWindowController`.
-  Server-side fix: `HERMES_WEBUI_HOST=0.0.0.0` in `.env`.
+必須在隧道參數中使用 StrictHostKeyChecking=yes 與 ExitOnForwardFailure=yes。
+使用 DispatchSource 處理 Process 訊號，而非輪詢。
 
 ---
 
-## Opus mentor — second opinion advisor
+已知問題／待辦事項
 
-When uncertain about Swift APIs, WKWebView behavior, ATS configuration, or Sparkle
-signing — ask opus before guessing:
+#25 — 非 localhost URL（如 Tailscale IP）因 ATS + 伺服器綁定而靜默失敗。
+  修正方法：在 Info.plist（build.sh 與 CI）加入 NSAllowsArbitraryLoadsInWebContent，
+  並於 BrowserWindowController 實作 didFailProvisionalNavigation。
+  伺服器端修正：.env 中設置 HERMES_WEBUI_HOST=0.0.0.0
 
-```bash
-# Pipe actual source + issue/PR body for highest-quality output
+---
+
+Opus 導師 — 第二意見顧問
+
+當不確定 Swift API、WKWebView 行為、ATS 設定或 Sparkle 簽署時，請先詢問 opus：
+
+# 輸入實際程式碼與 issue/PR 內文可獲得最高品質建議
 { cat Sources/HermesAgent/BrowserWindowController.swift; cat build.sh; } \
   | claude --model claude-opus-4-7 --thinking enabled \
   --print 'Senior Swift/macOS engineer. [DESCRIBE SITUATION].
 Review for: ATS config, WKNavigationDelegate completeness, Info.plist key parity, security.
 Provide exact Swift code fixes.'
-```
 
 ---
 
-## Common gotchas
+常見陷阱
 
-- **`gh pr view` is broken** — use `gh api repos/hermes-webui/hermes-swift-mac/pulls/NNN`
-- **Read ALL PR comments chronologically** — a "still working" in comment 1 may be
-  superseded by a ready signal in comment 2
-- **Swift is not available on Linux** — all Swift builds must run on a macOS runner
-- **`swift test` fails on Linux** — run tests in CI (macOS 14 runner) or on a Mac
-- **Sparkle path in CI artifacts** — verify framework path with `find` before hardcoding
-- **Universal binary** — build must produce arm64+x86_64. Use `swift build -c release`
-  (SPM handles universal automatically on Apple Silicon with correct toolchain)
+gh pr view 已失效 — 請使用 gh api repos/hermes-webui/hermes-swift-mac/pulls/NNN
+逐條閱讀所有 PR 評論 — 第一條評論可能為「仍在進行中」，第二條才是完成訊號
+Swift 無法在 Linux 使用 — 所有建置必須在 macOS runner 執行
+swift test 在 Linux 會失敗 — 請在 CI（macOS 14 runner）或 Mac 執行
+CI 產物的 Sparkle 路徑 — 打包前使用 find 確認框架路徑
+通用二進位 — 必須產生 arm64+x86_64。使用 swift build -c release
+  （SPM 在 Apple Silicon 且工具鏈正確時會自動處理通用建置）
